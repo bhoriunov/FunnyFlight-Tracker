@@ -219,3 +219,13 @@ __marimo__/
 
 __pycache__/
 .DS_Store
+
+# Local secrets and generated collector data
+.env.*
+!.env.example
+*.pem
+*.key
+live_snapshot.csv
+training_data.csv
+airline_cache.csv
+trash/
