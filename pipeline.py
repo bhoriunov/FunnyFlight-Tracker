@@ -1,14 +1,20 @@
 import argparse
 from pathlib import Path
 import time
+import pandas as pd
+import requests
 
 from adsb_data import AdsbFetchError, fetch_adsb_data
 from predict import score_plane
 from dataset_store import append_training_data
+from fr24_data import get_summaries_by_callsigns
+from fr24_cache import (
+    filter_uncached,
+    mark_as_cached,
+    get_cached_enrichment,
+)
 
-import pandas as pd
-
-
+RARITY = 40
 SNAPSHOT_PATH = Path(__file__).resolve().parent / "live_snapshot.csv"
 
 aircraft_map = {
@@ -144,6 +150,62 @@ def run_once() -> bool:
         print(f"Skipping snapshot: {error}", flush=True)
         return False
     ranked_df = score_live_dataset(live_df)
+    
+    top_rare = ranked_df[
+        ranked_df["rarity_score"] >= RARITY
+    ].head(3)
+
+    uncached_rare = filter_uncached(top_rare)
+
+    summaries = []
+
+    if not uncached_rare.empty:
+        rare_callsigns = (
+            uncached_rare["callsign"]
+            .str.strip()
+            .tolist()
+        )
+
+        try:
+            summaries = get_summaries_by_callsigns(
+                rare_callsigns
+            )
+        except requests.RequestException as error:
+            print(
+                f"FR24 enrichment failed: {error}",
+                flush=True
+            )
+        else:
+            mark_as_cached(uncached_rare, summaries)
+
+
+    cached_enrichment = get_cached_enrichment(top_rare)
+
+    enriched_df = ranked_df.copy()
+
+    enriched_df["hex"] = (
+        enriched_df["hex"]
+        .str.strip()
+        .str.upper()
+    )
+
+    enriched_df["callsign"] = (
+        enriched_df["callsign"]
+        .str.strip()
+    )
+
+    if not cached_enrichment.empty:
+        enriched_df = enriched_df.merge(
+            cached_enrichment,
+            on=["hex", "callsign"],
+            how="left"
+        )
+    else:
+        enriched_df["orig_icao"] = pd.NA
+        enriched_df["dest_icao"] = pd.NA
+        enriched_df["operating_as"] = pd.NA
+        enriched_df["fr24_id"] = pd.NA
+
     training_rows = ranked_df[[
         "hex",
         "callsign",
@@ -165,14 +227,19 @@ def run_once() -> bool:
         "gs",
         "dst",
         "rarity_score",
+        "orig_icao",
+        "dest_icao",
+        "operating_as",
+        "fr24_id",
     ]
 
-    print(ranked_df[output_columns])
+    print(enriched_df[output_columns])
 
-    ranked_df[output_columns].to_csv(
+    enriched_df[output_columns].to_csv(
         SNAPSHOT_PATH,
         index=False
     )
+
     return True
 
 

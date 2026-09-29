@@ -1,0 +1,3 @@
+flight_date,hex,callsign,looked_up,orig_icao,dest_icao,operating_as,fr24_id
+2026-09-29,3C6678,DLH3P,True,LKPR,EDDF,DLH,41e49649
+2026-09-29,4867C1,KLM36Z,True,LKPR,EHAM,KLM,41e4a0c6

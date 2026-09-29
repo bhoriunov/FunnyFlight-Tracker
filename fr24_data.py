@@ -2,6 +2,7 @@ import os
 from dotenv import load_dotenv
 import requests
 import pandas as pd
+from datetime import datetime, timedelta, timezone
 
 def get_headers() -> dict:
     load_dotenv()
@@ -79,3 +80,35 @@ if __name__ == "__main__":
         "dest_icao",
         "hex",
     ]])
+
+def get_summaries_by_callsigns(callsigns: list[str]) -> list[dict]:
+    if not callsigns:
+        return []
+    utc_now = datetime.now(timezone.utc)
+
+    utc_from = utc_now - timedelta(hours=6)
+
+    callsigns_param = ",".join(callsigns)
+
+    datetime_from = utc_from.strftime("%Y-%m-%dT%H:%M:%S")
+    datetime_to = utc_now.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+    params = {
+        "callsigns": callsigns_param,
+        "flight_datetime_from": datetime_from,
+        "flight_datetime_to": datetime_to,
+        "limit": 15
+    }
+
+    summary_url = "https://fr24api.flightradar24.com/api/flight-summary/light"
+    
+    response = requests.get(summary_url, headers=get_headers(), params=params, timeout=15)
+    response.raise_for_status()
+
+    data = response.json()
+
+    return data["data"]
+
+if __name__ == "__main__":
+    print(get_summaries_by_callsigns(["OMAMG", "OKVSB"]))
